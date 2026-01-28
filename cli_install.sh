@@ -88,7 +88,6 @@ case $EDITION in
         echo "Error: Invalid edition '$EDITION'. Valid options: start, business, small_business, standard"
         exit 1
         ;;
-        ;;
 esac
 
 # Validate language
@@ -184,16 +183,63 @@ echo "Executing installation in PHP container..."
 
 # Run the installation script
 if [ "$VERBOSE" = "true" ]; then
-    docker exec -it "$CONTAINER_NAME" php /var/www/bitrix/install_cli.php $PHP_ARGS
-else
     docker exec -i "$CONTAINER_NAME" php /var/www/bitrix/install_cli.php $PHP_ARGS
+else
+    docker exec -i "$CONTAINER_NAME" php /var/www/bitrix/install_cli.php $PHP_ARGS 2>/dev/null
 fi
 
 EXIT_CODE=$?
 
+# Wait a moment for any background processes to complete
+sleep 5
+
 if [ $EXIT_CODE -eq 0 ]; then
     echo ""
-    echo "Installation completed successfully!"
+    echo "Initial download started successfully!"
+
+    # Check if download completed
+    if docker exec "$CONTAINER_NAME" test -f "/var/www/bitrix/start_encode.tar.gz" || docker exec "$CONTAINER_NAME" test -f "/var/www/bitrix/start_encode.tar.gz.tmp"; then
+        echo "Download in progress or completed. Checking for completion..."
+
+        # Wait for download to complete if it's still in progress
+        timeout=600  # 10 minutes timeout
+        count=0
+        while docker exec "$CONTAINER_NAME" test -f "/var/www/bitrix/start_encode.tar.gz.tmp" && [ $count -lt $timeout ]; do
+            echo -n "."
+            sleep 10
+            count=$((count + 10))
+        done
+
+        if docker exec "$CONTAINER_NAME" test -f "/var/www/bitrix/start_encode.tar.gz"; then
+            echo ""
+            echo "Download completed. Starting unpacking..."
+
+            # Run unpack command
+            if [ "$VERBOSE" = "true" ]; then
+                docker exec -i "$CONTAINER_NAME" php /var/www/bitrix/install_cli.php --action=unpack --lang=$LANG
+            else
+                docker exec -i "$CONTAINER_NAME" php /var/www/bitrix/install_cli.php --action=unpack --lang=$LANG 2>/dev/null
+            fi
+
+            UNPACK_EXIT_CODE=$?
+
+            if [ $UNPACK_EXIT_CODE -eq 0 ]; then
+                echo ""
+                echo "Installation completed successfully!"
+            else
+                echo ""
+                echo "Unpacking failed with exit code: $UNPACK_EXIT_CODE"
+                exit $UNPACK_EXIT_CODE
+            fi
+        else
+            echo ""
+            echo "Download may still be in progress. You can monitor the process in the container."
+            echo "The distribution file will be located at /var/www/bitrix/ when complete."
+        fi
+    else
+        echo "Distribution file not found. Download may still be in progress."
+    fi
+
     echo ""
     echo "Your Bitrix installation should now be accessible at:"
     echo "  http://localhost"

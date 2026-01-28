@@ -309,8 +309,9 @@ function handle_cli_installation($options) {
                     cli_output("Unpacking completed.");
 
                     // Clean up the distribution file after unpacking
-                    if (file_exists($_SERVER['DOCUMENT_ROOT'] . '/' . $dist_file)) {
-                        unlink($_SERVER['DOCUMENT_ROOT'] . '/' . $dist_file);
+                    $current_dir = getcwd();
+                    if (file_exists($current_dir . '/' . $dist_file)) {
+                        unlink($current_dir . '/' . $dist_file);
                         cli_output("Cleaned up distribution file: " . $dist_file);
                     }
                 } else {
@@ -324,27 +325,53 @@ function handle_cli_installation($options) {
         case 'unpack':
             cli_output("Unpacking downloaded distribution...");
 
-            // Find the downloaded distribution file
-            $dist_files = glob($_SERVER['DOCUMENT_ROOT'] . '/*.tar.gz');
+            // Find the downloaded distribution file based on the edition
+            $edition_url = $available_editions[$options['edition']];
 
-            if (empty($dist_files)) {
-                cli_output("Error: No distribution files found to unpack.", true);
-                return 1;
-            }
+            // Different editions have different file naming patterns
+            $current_dir = getcwd();
+            $possible_patterns = [
+                $current_dir . '/' . basename($edition_url) . '*.tar.gz',
+                $current_dir . '/' . basename($edition_url) . '*encode*.tar.gz',
+                $current_dir . '/' . basename($edition_url) . '*source*.tar.gz',
+                $current_dir . '/*.tar.gz'
+            ];
 
-            // Use the most recently created file
-            $latest_file = null;
-            $latest_time = 0;
-            foreach ($dist_files as $file) {
-                $file_time = filemtime($file);
-                if ($file_time > $latest_time) {
-                    $latest_time = $file_time;
-                    $latest_file = $file;
+            $dist_file = null;
+            foreach ($possible_patterns as $pattern) {
+                $dist_files = glob($pattern);
+                if (!empty($dist_files)) {
+                    // Use the most recently created file
+                    $latest_time = 0;
+                    foreach ($dist_files as $file) {
+                        $file_time = filemtime($file);
+                        if ($file_time > $latest_time) {
+                            $latest_time = $file_time;
+                            $dist_file = basename($file);
+                        }
+                    }
+                    if ($dist_file) {
+                        break;
+                    }
                 }
             }
 
-            if ($latest_file) {
-                $dist_file = basename($latest_file);
+            // If we still don't have a file, try to find any .tar.gz file
+            if (!$dist_file) {
+                $all_tar_files = glob($_SERVER['DOCUMENT_ROOT'] . '/*.tar.gz');
+                if (!empty($all_tar_files)) {
+                    $latest_time = 0;
+                    foreach ($all_tar_files as $file) {
+                        $file_time = filemtime($file);
+                        if ($file_time > $latest_time) {
+                            $latest_time = $file_time;
+                            $dist_file = basename($file);
+                        }
+                    }
+                }
+            }
+
+            if ($dist_file) {
                 cli_output("Found distribution file: " . $dist_file);
 
                 // Prepare parameters for unpacking
@@ -365,12 +392,13 @@ function handle_cli_installation($options) {
                 cli_output("Unpacking completed.");
 
                 // Clean up the distribution file after unpacking
-                if (file_exists($_SERVER['DOCUMENT_ROOT'] . '/' . $dist_file)) {
-                    unlink($_SERVER['DOCUMENT_ROOT'] . '/' . $dist_file);
+                $current_dir = getcwd();
+                if (file_exists($current_dir . '/' . $dist_file)) {
+                    unlink($current_dir . '/' . $dist_file);
                     cli_output("Cleaned up distribution file: " . $dist_file);
                 }
             } else {
-                cli_output("Error: Could not determine which distribution file to unpack.", true);
+                cli_output("Error: No distribution files found to unpack.", true);
                 return 1;
             }
 
