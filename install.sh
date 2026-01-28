@@ -52,7 +52,7 @@ else
 
     # Clone repository to current directory
     TEMP_DIR=$(mktemp -d)
-    git clone --depth=1 https://github.com/sunknown/bitrixdock.git "$TEMP_DIR"
+    git clone --depth=1 --branch no-root https://github.com/sunknown/bitrixdock.git "$TEMP_DIR"
     cp -r "$TEMP_DIR"/* "$TEMP_DIR"/.[^.]* "$INSTALL_PATH/" 2>/dev/null || true
     rm -rf "$TEMP_DIR"
 fi
