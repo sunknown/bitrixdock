@@ -11,12 +11,11 @@ services:
         networks:
             - bitrixdock
         restart: unless-stopped
-        security_opt:
-            - no-new-privileges:true
+        user: "1000:1000"
         tmpfs:
             - /tmp
-        extra_hosts:
-            - "bitrix.local:172.18.0.9"
+        # Temporarily remove user constraint to allow PHP-FPM to start
+        # We'll handle file permissions differently
 
     workspace:
         build:
@@ -30,9 +29,9 @@ services:
             - ~/.ssh:/root/.ssh:ro
         tty: true
         networks:
-            bitrixdock:
-                ipv4_address: 172.18.0.12
+            - bitrixdock
         restart: unless-stopped
+        user: "1000:1000"
         profiles:
             - workspace
 
@@ -46,14 +45,10 @@ services:
             - '${INTERFACE}:80:80'
             - '${INTERFACE}:443:443'
         networks:
-            bitrixdock:
-                ipv4_address: 172.18.0.9
+            - bitrixdock
         environment:
             TZ: Europe/Moscow
         restart: unless-stopped
-        extra_hosts:
-            - "push-server-sub:172.18.0.10"
-            - "push-server-pub:172.18.0.11"
 
     db:
         build: ./${DB_SERVER_TYPE}
@@ -99,8 +94,7 @@ services:
     push-server-sub:
         image: ikarpovich/bitrix-push-server
         networks:
-            bitrixdock:
-                ipv4_address: 172.18.0.10
+            - bitrixdock
         environment:
             - REDIS_HOST=redis
             - LISTEN_HOSTNAME=0.0.0.0
@@ -115,8 +109,7 @@ services:
     push-server-pub:
         image: ikarpovich/bitrix-push-server
         networks:
-            bitrixdock:
-                ipv4_address: 172.18.0.11
+            - bitrixdock
         environment:
             - REDIS_HOST=redis
             - LISTEN_HOSTNAME=0.0.0.0
@@ -141,6 +134,3 @@ volumes:
 
 networks:
     bitrixdock:
-        ipam:
-            config:
-                - subnet: 172.18.0.0/24

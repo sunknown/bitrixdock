@@ -26,8 +26,9 @@ curl -fsSL https://www.1c-bitrix.ru/download/scripts/bitrixsetup.php -o "$INSTAL
 chmod -R 775 "$INSTALL_PATH/bitrixdock/www"
 
 # Set ownership only on Linux (macOS doesn't have www-data group by default)
+# Use current user instead of root to avoid permission issues with containers
 if [ "$OS" = "Linux" ]; then
-    chown -R root:www-data "$INSTALL_PATH/bitrixdock/www"
+    chown -R :www-data "$INSTALL_PATH/bitrixdock/www"
 fi
 
 echo "Config"
