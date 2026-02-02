@@ -50,6 +50,7 @@ RUN apt-get update \
     libicu-dev \
     libmagickwand-dev \
     zlib1g-dev \
+    curl \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /usr/share/doc/*
 
 COPY ./php.ini /usr/local/etc/php/conf.d/90-php.ini

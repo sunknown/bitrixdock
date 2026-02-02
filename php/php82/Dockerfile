@@ -17,6 +17,7 @@ RUN apt-get update \
     php8.2-opcache \
     php8.2-soap \
     php8.2-zip \
+    curl \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /usr/share/doc/*
 
 COPY ./php.ini /etc/php/8.2/fpm/conf.d/90-php.ini

@@ -14,6 +14,7 @@ RUN apt-get update \
     php8.5-mysql \
     php8.5-soap \
     php8.5-zip \
+    curl \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /usr/share/doc/*
 
 COPY ./php.ini /etc/php/8.5/fpm/conf.d/90-php.ini
