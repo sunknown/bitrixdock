@@ -70,7 +70,7 @@ services:
         restart: unless-stopped
 
     memcached:
-        image: memcached:latest
+        image: memcached:alpine
         networks:
             - bitrixdock
         environment:
