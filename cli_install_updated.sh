@@ -191,20 +191,24 @@ echo "Executing download in PHP container..."
 OUTPUT_FILE="/var/www/bitrix/${EDITION}${SUFFIX}"
 
 # Try to download using curl first, then wget if curl fails
-if docker exec "$CONTAINER_NAME" command -v curl >/dev/null 2>&1; then
+if docker exec "$CONTAINER_NAME" sh -c 'which curl || command -v curl' >/dev/null 2>&1; then
+    echo "Using curl for download..."
     if [ "$VERBOSE" = "true" ]; then
-        docker exec "$CONTAINER_NAME" curl -L -o "$OUTPUT_FILE" "$DOWNLOAD_URL" --progress-bar
+        docker exec "$CONTAINER_NAME" sh -c "curl -L -o '$OUTPUT_FILE' '$DOWNLOAD_URL' --progress-bar"
     else
-        docker exec "$CONTAINER_NAME" curl -L -o "$OUTPUT_FILE" "$DOWNLOAD_URL" --silent
+        docker exec "$CONTAINER_NAME" sh -c "curl -L -o '$OUTPUT_FILE' '$DOWNLOAD_URL' --silent"
     fi
-elif docker exec "$CONTAINER_NAME" command -v wget >/dev/null 2>&1; then
+elif docker exec "$CONTAINER_NAME" sh -c 'which wget || command -v wget' >/dev/null 2>&1; then
+    echo "Using wget for download..."
     if [ "$VERBOSE" = "true" ]; then
-        docker exec "$CONTAINER_NAME" wget -O "$OUTPUT_FILE" "$DOWNLOAD_URL" --progress=bar
+        docker exec "$CONTAINER_NAME" sh -c "wget -O '$OUTPUT_FILE' '$DOWNLOAD_URL' --progress=bar"
     else
-        docker exec "$CONTAINER_NAME" wget -O "$OUTPUT_FILE" "$DOWNLOAD_URL" --quiet
+        docker exec "$CONTAINER_NAME" sh -c "wget -O '$OUTPUT_FILE' '$DOWNLOAD_URL' --quiet"
     fi
 else
     echo "Error: Neither curl nor wget is available in the container"
+    echo "Checking what's available..."
+    docker exec "$CONTAINER_NAME" sh -c 'which -a curl wget'
     exit 1
 fi
 
