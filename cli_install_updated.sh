@@ -222,30 +222,27 @@ if docker exec "$CONTAINER_NAME" test -f "$OUTPUT_FILE" && [ "$(docker exec "$CO
         echo "License key file created."
     fi
 
-    # Optionally start unpacking
+# Optionally start unpacking
     if [ "$AUTO" = "true" ]; then
-        echo "Starting unpacking..."
+        echo "Starting unpacking with tar..."
 
-        # Run unpack command
+        # Extract the archive directly to /var/www/bitrix using tar
         if [ "$VERBOSE" = "true" ]; then
-            docker exec -i "$CONTAINER_NAME" php /var/www/bitrix/install_cli.php --action=unpack --edition="$EDITION" --lang=$LANG
+            docker exec "$CONTAINER_NAME" sh -c "tar -xzf '$OUTPUT_FILE' -C /var/www/bitrix --strip-components=1 && ls -la /var/www/bitrix"
         else
-            docker exec -i "$CONTAINER_NAME" php /var/www/bitrix/install_cli.php --action=unpack --edition="$EDITION" --lang=$LANG 2>/dev/null
+            docker exec "$CONTAINER_NAME" sh -c "tar -xzf '$OUTPUT_FILE' -C /var/www/bitrix --strip-components=1"
         fi
 
-        UNPACK_EXIT_CODE=$?
+        # Remove the downloaded archive after successful extraction
+        docker exec "$CONTAINER_NAME" rm -f "$OUTPUT_FILE"
 
-        if [ $UNPACK_EXIT_CODE -eq 0 ]; then
-            echo ""
-            echo "Installation completed successfully!"
-        else
-            echo ""
-            echo "Unpacking failed with exit code: $UNPACK_EXIT_CODE"
-            exit $UNPACK_EXIT_CODE
-        fi
+        echo ""
+        echo "Extraction completed successfully!"
+        echo "Files have been extracted to /var/www/bitrix directory."
+        echo "Installation completed successfully!"
     else
-        echo "Download completed. You can now unpack the archive manually."
-        echo "Run: docker exec -i $CONTAINER_NAME php /var/www/bitrix/install_cli.php --action=unpack --edition=$EDITION --lang=$LANG"
+        echo "Download completed. You can now extract the archive manually."
+        echo "Inside container, run: tar -xzf $OUTPUT_FILE -C /var/www/bitrix --strip-components=1"
     fi
 else
     echo "Error: Download failed or file is empty"
