@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Command-line installation wrapper for Bitrix using direct download
-# Usage: ./cli_install_updated.sh --Edition=start --lang=en
+# Usage: ./cli_install_updated.sh --edition=start --lang=en
 
 set -e # Exit on any error
 
@@ -10,8 +10,8 @@ EDITION="start"
 LANG="ru"
 DEMO="true"
 LICENSE_KEY=""
-AUTO="false"
-VERBOSE="false"
+AUTO="true"
+VERBOSE="true"
 
 # Function to display help
 show_help() {
@@ -36,7 +36,7 @@ show_help() {
 # Parse command line arguments
 for arg in "$@"; do
     case $arg in
-    --Edition=*)
+    --edition=*)
         EDITION="${arg#*=}"
         ;;
     --lang=*)
@@ -218,7 +218,7 @@ if docker exec "$CONTAINER_NAME" test -f "$OUTPUT_FILE" && [ "$(docker exec "$CO
 
     # If license key was provided, create the license key file
     if [ "$COMMERCIAL" = "true" ] && [ -n "$LICENSE_KEY" ]; then
-        echo "<? \$LICENSE_KEY = \""$LICENSE_KEY"\"; ?>" | docker exec -i "$CONTAINER_NAME" tee /var/www/bitrix/bitrix/license_key.php > /dev/null
+        echo "<? \$LICENSE_KEY = \""$LICENSE_KEY"\"; ?>" | docker exec -i "$CONTAINER_NAME" tee /var/www/bitrix/bitrix/license_key.php >/dev/null
         echo "License key file created."
     fi
 
@@ -228,9 +228,9 @@ if docker exec "$CONTAINER_NAME" test -f "$OUTPUT_FILE" && [ "$(docker exec "$CO
 
         # Run unpack command
         if [ "$VERBOSE" = "true" ]; then
-            docker exec -i "$CONTAINER_NAME" php /var/www/bitrix/install_cli.php --action=unpack --Edition="$EDITION" --lang=$LANG
+            docker exec -i "$CONTAINER_NAME" php /var/www/bitrix/install_cli.php --action=unpack --edition="$EDITION" --lang=$LANG
         else
-            docker exec -i "$CONTAINER_NAME" php /var/www/bitrix/install_cli.php --action=unpack --Edition="$EDITION" --lang=$LANG 2>/dev/null
+            docker exec -i "$CONTAINER_NAME" php /var/www/bitrix/install_cli.php --action=unpack --edition="$EDITION" --lang=$LANG 2>/dev/null
         fi
 
         UNPACK_EXIT_CODE=$?
@@ -245,7 +245,7 @@ if docker exec "$CONTAINER_NAME" test -f "$OUTPUT_FILE" && [ "$(docker exec "$CO
         fi
     else
         echo "Download completed. You can now unpack the archive manually."
-        echo "Run: docker exec -i $CONTAINER_NAME php /var/www/bitrix/install_cli.php --action=unpack --Edition=$EDITION --lang=$LANG"
+        echo "Run: docker exec -i $CONTAINER_NAME php /var/www/bitrix/install_cli.php --action=unpack --edition=$EDITION --lang=$LANG"
     fi
 else
     echo "Error: Download failed or file is empty"
