@@ -18,7 +18,7 @@ show_help() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  --edition=EDITION    Specify edition to install (start, business, small_business, standard) [default: start]"
+    echo "  --edition=EDITION    Specify edition to install (start, business, small_business, standard, bitrix24_shop, bitrix24, bitrix24_enterprise) [default: start]"
     echo "  --lang=LANG          Language (ru, en, de) [default: ru]"
     echo "  --demo               Use demo license (default)"
     echo "  --commercial         Use commercial license"
@@ -30,6 +30,7 @@ show_help() {
     echo "Examples:"
     echo "  $0 --edition=start --demo"
     echo "  $0 --edition=business --demo --lang=ru"
+    echo "  $0 --edition=bitrix24 --demo --lang=ru"
     echo "  $0 --edition=start --commercial --license-key=XXXXX"
 }
 
@@ -74,10 +75,11 @@ for arg in "$@"; do
 done
 
 # Validate edition
+# Validate edition
 case $EDITION in
-start | business | small_business | standard) ;;
+start | business | small_business | standard | bitrix24_shop | bitrix24 | bitrix24_enterprise) ;;
 *)
-    echo "Error: Invalid edition '$EDITION'. Valid options: start, business, small_business, standard"
+    echo "Error: Invalid edition '$EDITION'. Valid options: start, business, small_business, standard, bitrix24_shop, bitrix24, bitrix24_enterprise" 
     exit 1
     ;;
 esac
@@ -168,8 +170,28 @@ else
     fi
 fi
 
-# Construct the full download URL
-DOWNLOAD_URL="$BASE_URL/$DOWNLOAD_PATH$EDITION$SUFFIX"
+# For Bitrix24 editions, use different URL pattern
+if [[ "$EDITION" == *"bitrix24"* ]]; then
+    # Map edition names to their specific paths
+    case "$EDITION" in
+        "bitrix24_shop")
+            EDITION_PATH="portal/bitrix24_shop"
+            ;;
+        "bitrix24")
+            EDITION_PATH="portal/bitrix24"
+            ;;
+        "bitrix24_enterprise")
+            EDITION_PATH="portal/bitrix24_enterprise"
+            ;;
+        *)
+            EDITION_PATH="$EDITION"
+            ;;
+    esac
+
+    DOWNLOAD_URL="$BASE_URL/$DOWNLOAD_PATH$EDITION_PATH$SUFFIX"
+else
+    DOWNLOAD_URL="$BASE_URL/$DOWNLOAD_PATH$EDITION$SUFFIX"
+fi
 
 if [ "$COMMERCIAL" = "true" ] && [ -n "$LICENSE_KEY" ]; then
     DOWNLOAD_URL="$DOWNLOAD_URL?lp=$(echo -n $LICENSE_KEY | md5sum | cut -d' ' -f1)"
