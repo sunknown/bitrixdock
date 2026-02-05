@@ -12,6 +12,7 @@ DEMO="true"
 LICENSE_KEY=""
 AUTO="true"
 VERBOSE="true"
+PROJECT_NAME="$(basename "$PWD")" # Use current directory name as project name. Use for container naming
 
 # Function to display help
 show_help() {
@@ -24,6 +25,7 @@ show_help() {
     echo "  --commercial         Use commercial license"
     echo "  --license-key=KEY    Specify commercial license key (requires --commercial)"
     echo "  --auto               Automatically start unpacking after download"
+    echo "  --project-name       Set project name"
     echo "  --verbose            Enable verbose output"
     echo "  --help               Show this help message"
     echo ""
@@ -66,6 +68,9 @@ for arg in "$@"; do
         show_help
         exit 0
         ;;
+    --project-name=*)
+        PROJECT_NAME="${arg#*=}"
+        ;;
     *)
         echo "Unknown option: $arg"
         show_help
@@ -75,11 +80,10 @@ for arg in "$@"; do
 done
 
 # Validate edition
-# Validate edition
 case $EDITION in
 start | business | small_business | standard | bitrix24_shop | bitrix24 | bitrix24_enterprise) ;;
 *)
-    echo "Error: Invalid edition '$EDITION'. Valid options: start, business, small_business, standard, bitrix24_shop, bitrix24, bitrix24_enterprise" 
+    echo "Error: Invalid edition '$EDITION'. Valid options: start, business, small_business, standard, bitrix24_shop, bitrix24, bitrix24_enterprise"
     exit 1
     ;;
 esac
@@ -133,15 +137,12 @@ if [ "$($DOCKER_COMPOSE_CMD ps -q 2>/dev/null | wc -l)" -eq 0 ]; then
 
     # Wait for services to be ready
     echo "Waiting for services to be ready..."
-    sleep 10
+    sleep 10 # todo optimize
 fi
 
-echo "Starting Bitrix installation..."
-echo "edition: $EDITION"
-echo "Language: $LANG"
-echo "License Type: $([ "$DEMO" = "true" ] && echo "Demo" || echo "Commercial")"
+echo "Starting Bitrix..."
 if [ "$COMMERCIAL" = "true" ] && [ -n "$LICENSE_KEY" ]; then
-    echo "License Key: ***$(echo $LICENSE_KEY | cut -c $((${#LICENSE_KEY} - 3))-${#LICENSE_KEY})"
+    echo "• License Key: ***$(echo $LICENSE_KEY | cut -c $((${#LICENSE_KEY} - 3))-${#LICENSE_KEY})"
 fi
 
 # Determine the correct domain based on language
@@ -200,11 +201,23 @@ fi
 echo "Downloading from: $DOWNLOAD_URL"
 
 # Get container name
-CONTAINER_NAME=$($DOCKER_COMPOSE_CMD ps -q php)
+PHP_CONTAINER_NAME="${PROJECT_NAME}_php"
 
-if [ -z "$CONTAINER_NAME" ]; then
-    echo "Error: Could not find PHP container"
+echo "Target container: $PHP_CONTAINER_NAME"
+
+# Check if container exists
+if ! docker ps -a --format '{{.Names}}' | grep -q "^${PHP_CONTAINER_NAME}$"; then
+    echo "Error: Container '$PHP_CONTAINER_NAME' not found"
+    echo "Available containers:"
+    docker ps -a --format '{{.Names}}'
     exit 1
+fi
+
+# Check if container is running
+if ! docker ps --format '{{.Names}}' | grep -q "^${PHP_CONTAINER_NAME}$"; then
+    echo "Starting container $PHP_CONTAINER_NAME..."
+    docker start "$PHP_CONTAINER_NAME"
+    sleep 3
 fi
 
 echo "Executing download in PHP container..."
@@ -212,70 +225,103 @@ echo "Executing download in PHP container..."
 # Determine output file path
 OUTPUT_FILE="/var/www/bitrix/${EDITION}${SUFFIX}"
 
-# Try to download using curl first, then wget if curl fails
-if docker exec "$CONTAINER_NAME" sh -c 'which curl || command -v curl' >/dev/null 2>&1; then
-    echo "Using curl for download..."
-    if [ "$VERBOSE" = "true" ]; then
-        docker exec "$CONTAINER_NAME" sh -c "curl -L -o '$OUTPUT_FILE' '$DOWNLOAD_URL' --progress-bar"
-    else
-        docker exec "$CONTAINER_NAME" sh -c "curl -L -o '$OUTPUT_FILE' '$DOWNLOAD_URL' --silent"
-    fi
-elif docker exec "$CONTAINER_NAME" sh -c 'which wget || command -v wget' >/dev/null 2>&1; then
-    echo "Using wget for download..."
-    if [ "$VERBOSE" = "true" ]; then
-        docker exec "$CONTAINER_NAME" sh -c "wget -O '$OUTPUT_FILE' '$DOWNLOAD_URL' --progress=bar"
-    else
-        docker exec "$CONTAINER_NAME" sh -c "wget -O '$OUTPUT_FILE' '$DOWNLOAD_URL' --quiet"
-    fi
-else
-    echo "Error: Neither curl nor wget is available in the container"
-    echo "Checking what's available..."
-    docker exec "$CONTAINER_NAME" sh -c 'which -a curl wget'
-    exit 1
+# Initialize download flag
+NEED_DOWNLOAD=true
+
+# Check if bitrix is already installed
+if docker exec "$PHP_CONTAINER_NAME" sh -c "[ -f '/var/www/bitrix/index.php' ] && [ -d '/var/www/bitrix/bitrix' ]"; then
+    echo "Bitrix already installed in /var/www/bitrix/. Skipping download."
+    NEED_DOWNLOAD=false
 fi
 
-# Verify the download
-if docker exec "$CONTAINER_NAME" test -f "$OUTPUT_FILE" && [ "$(docker exec "$CONTAINER_NAME" stat -c%s "$OUTPUT_FILE" 2>/dev/null || echo 0)" -gt 0 ]; then
-    echo "Download completed successfully!"
-
-    # If license key was provided, create the license key file
-    if [ "$COMMERCIAL" = "true" ] && [ -n "$LICENSE_KEY" ]; then
-        echo "<? \$LICENSE_KEY = \""$LICENSE_KEY"\"; ?>" | docker exec -i "$CONTAINER_NAME" tee /var/www/bitrix/bitrix/license_key.php >/dev/null
-        echo "License key file created."
+# Try to download using curl first, then wget if curl fails
+if [ "$NEED_DOWNLOAD" = "true" ]; then
+    if docker exec "$PHP_CONTAINER_NAME" sh -c 'which curl || command -v curl' >/dev/null 2>&1; then
+        echo "Using curl for download..."
+        if [ "$VERBOSE" = "true" ]; then
+            docker exec "$PHP_CONTAINER_NAME" sh -c "curl -L -o '$OUTPUT_FILE' '$DOWNLOAD_URL' --progress-bar"
+        else
+            docker exec "$PHP_CONTAINER_NAME" sh -c "curl -L -o '$OUTPUT_FILE' '$DOWNLOAD_URL' --silent"
+        fi
+    elif docker exec "$PHP_CONTAINER_NAME" sh -c 'which wget || command -v wget' >/dev/null 2>&1; then
+        echo "Using wget for download..."
+        if [ "$VERBOSE" = "true" ]; then
+            docker exec "$PHP_CONTAINER_NAME" sh -c "wget -O '$OUTPUT_FILE' '$DOWNLOAD_URL' --progress=bar"
+        else
+            docker exec "$PHP_CONTAINER_NAME" sh -c "wget -O '$OUTPUT_FILE' '$DOWNLOAD_URL' --quiet"
+        fi
+    else
+        echo "Error: Neither curl nor wget is available in the container"
+        echo "Checking what's available..."
+        docker exec "$PHP_CONTAINER_NAME" sh -c 'which -a curl wget'
+        exit 1
     fi
 
-# Optionally start unpacking
-    if [ "$AUTO" = "true" ]; then
-        echo "Starting unpacking with tar..."
+    # Verify the download
+    if docker exec "$PHP_CONTAINER_NAME" test -f "$OUTPUT_FILE" && [ "$(docker exec "$PHP_CONTAINER_NAME" stat -c%s "$OUTPUT_FILE" 2>/dev/null || echo 0)" -gt 0 ]; then
+        echo "✓ Download completed successfully!"
 
-        # Extract the archive directly to /var/www/bitrix using tar
-        if [ "$VERBOSE" = "true" ]; then
-            docker exec "$CONTAINER_NAME" sh -c "tar -xzf '$OUTPUT_FILE' -C /var/www/bitrix --strip-components=1 && ls -la /var/www/bitrix"
-        else
-            docker exec "$CONTAINER_NAME" sh -c "tar -xzf '$OUTPUT_FILE' -C /var/www/bitrix --strip-components=1"
+        # If license key was provided, create the license key file
+        if [ "$COMMERCIAL" = "true" ] && [ -n "$LICENSE_KEY" ]; then
+            echo "Creating license key file..."
+            echo "<? \$LICENSE_KEY = \""$LICENSE_KEY"\"; ?>" | docker exec -i "$PHP_CONTAINER_NAME" tee /var/www/bitrix/bitrix/license_key.php >/dev/null
+            echo "✓ License key file created."
         fi
 
-        # Remove the downloaded archive after successful extraction
-        docker exec "$CONTAINER_NAME" rm -f "$OUTPUT_FILE"
+        # Optionally start unpacking
+        if [ "$AUTO" = "true" ]; then
+            echo "Starting unpacking with tar..."
 
-        echo ""
-        echo "Extraction completed successfully!"
-        echo "Files have been extracted to /var/www/bitrix directory."
-        echo "Installation completed successfully!"
+            # Extract the archive directly to /var/www/bitrix using tar
+            if [ "$VERBOSE" = "true" ]; then
+                docker exec "$PHP_CONTAINER_NAME" sh -c "tar -xzf '$OUTPUT_FILE' -C /var/www/bitrix --strip-components=1 && echo 'Extracted files:' && ls -la /var/www/bitrix | head -20"
+            else
+                docker exec "$PHP_CONTAINER_NAME" sh -c "tar -xzf '$OUTPUT_FILE' -C /var/www/bitrix --strip-components=1"
+            fi
+
+            # Remove the downloaded archive after successful extraction
+            docker exec "$PHP_CONTAINER_NAME" rm -f "$OUTPUT_FILE"
+
+            # Set proper permissions (important for Bitrix)
+            docker exec "$PHP_CONTAINER_NAME" sh -c "chmod -R 755 /var/www/bitrix && chown -R www-data:www-data /var/www/bitrix 2>/dev/null || true"
+
+            echo ""
+            echo "✓ Extraction completed successfully!"
+            echo "✓ Files have been extracted to /var/www/bitrix directory."
+            echo "✓ Installation completed successfully!"
+        else
+            echo "Download completed. You can now extract the archive manually."
+            echo "Inside container, run: tar -xzf $OUTPUT_FILE -C /var/www/bitrix --strip-components=1"
+        fi
     else
-        echo "Download completed. You can now extract the archive manually."
-        echo "Inside container, run: tar -xzf $OUTPUT_FILE -C /var/www/bitrix --strip-components=1"
+        echo "Error: Download failed or file is empty"
+        echo "File location: $OUTPUT_FILE"
+        docker exec "$PHP_CONTAINER_NAME" ls -la /var/www/bitrix/ 2>/dev/null || true
+        exit 1
     fi
-else
-    echo "Error: Download failed or file is empty"
-    echo "File location: $OUTPUT_FILE"
-    docker exec "$CONTAINER_NAME" ls -la /var/www/bitrix/ 2>/dev/null || true
-    exit 1
 fi
 
+echo ""
+echo "=========================================="
+echo "INSTALLATION SUMMARY"
+echo "=========================================="
+echo "• Project: $PROJECT_NAME"
+echo "• Edition: $EDITION"
+echo "• Language: $LANG"
+echo "• License: $([ "$DEMO" = "true" ] && echo "Demo" || echo "Commercial")"
 echo ""
 echo "Your Bitrix installation should now be accessible at:"
 echo "  http://localhost"
 echo ""
 echo "To access the admin panel, visit:"
 echo "  http://localhost/bitrix/"
+echo ""
+echo "Container names for this project:"
+echo "  • ${PROJECT_NAME}_php"
+echo "  • ${PROJECT_NAME}_web_server"
+echo "  • ${PROJECT_NAME}_db"
+echo "  • ${PROJECT_NAME}_workspace"
+echo ""
+echo "To manage this project:"
+echo "  docker-compose -p $PROJECT_NAME [command]"
+echo "=========================================="

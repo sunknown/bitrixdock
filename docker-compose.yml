@@ -1,6 +1,7 @@
 ---
 services:
     php:
+        container_name: ${COMPOSE_PROJECT_NAME}_php
         build: ./php/${PHP_VERSION}
         volumes:
             - ${SITE_PATH}:/var/www/bitrix
@@ -8,8 +9,6 @@ services:
             - /etc/localtime:/etc/localtime/:ro
         environment:
             TZ: Europe/Moscow
-        networks:
-            - bitrixdock
         restart: unless-stopped
         tmpfs:
             - /tmp
@@ -17,6 +16,7 @@ services:
         # We'll handle file permissions differently
 
     workspace:
+        container_name: ${COMPOSE_PROJECT_NAME}_workspace
         build:
             context: ./workspace/
             args:
@@ -27,14 +27,13 @@ services:
             - ~/.ssh:/var/www/.ssh:ro
             - ~/.ssh:/root/.ssh:ro
         tty: true
-        networks:
-            - bitrixdock
         restart: unless-stopped
         user: "1000:1000"
         profiles:
             - workspace
 
     web_server:
+        container_name: ${COMPOSE_PROJECT_NAME}_web_server
         build: ./${WEB_SERVER_TYPE}
         volumes:
             - ${SITE_PATH}:/var/www/bitrix
@@ -43,20 +42,19 @@ services:
         ports:
             - '${INTERFACE}:80:80'
             - '${INTERFACE}:443:443'
-        networks:
-            - bitrixdock
         environment:
             TZ: Europe/Moscow
         restart: unless-stopped
 
     db:
+        container_name: ${COMPOSE_PROJECT_NAME}_db
         build: ./${DB_SERVER_TYPE}
         platform: linux/amd64
         volumes:
             - ./${DB_SERVER_TYPE}/init:/docker-entrypoint-initdb.d
             - ./logs/db:/var/log/mysql
             - /etc/localtime:/etc/localtime/:ro
-            - db:/var/lib/mysql
+            - db_data:/var/lib/mysql  # Именованный volume
         ports:
             - '${INTERFACE}:3306:3306'
         environment:
@@ -65,19 +63,17 @@ services:
             MYSQL_PASSWORD: ${MYSQL_PASSWORD}
             MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
             TZ: Europe/Moscow
-        networks:
-            - bitrixdock
         restart: unless-stopped
 
     memcached:
+        container_name: ${COMPOSE_PROJECT_NAME}_memcached
         image: memcached:alpine
-        networks:
-            - bitrixdock
         environment:
             TZ: Europe/Moscow
         restart: unless-stopped
 
     adminer:
+        container_name: ${COMPOSE_PROJECT_NAME}_adminer
         image: dockette/adminer:full
         ports:
             - '${INTERFACE}:8080:80'
@@ -85,15 +81,12 @@ services:
             UPLOAD: 1024M # upload_max_filesize, post_max_size
             TZ: Europe/Moscow
         restart: unless-stopped
-        networks:
-            - bitrixdock
         profiles:
             - admin
 
     push-server-sub:
+        container_name: ${COMPOSE_PROJECT_NAME}_push_server_sub
         image: ikarpovich/bitrix-push-server
-        networks:
-            - bitrixdock
         environment:
             - REDIS_HOST=redis
             - LISTEN_HOSTNAME=0.0.0.0
@@ -106,9 +99,8 @@ services:
             - push
 
     push-server-pub:
+        container_name: ${COMPOSE_PROJECT_NAME}_push_server_pub
         image: ikarpovich/bitrix-push-server
-        networks:
-            - bitrixdock
         environment:
             - REDIS_HOST=redis
             - LISTEN_HOSTNAME=0.0.0.0
@@ -121,15 +113,12 @@ services:
             - push
 
     redis:
+        container_name: ${COMPOSE_PROJECT_NAME}_redis
         image: redis
-        networks:
-            - bitrixdock
         profiles:
             - push
 
 volumes:
-    db:
+    db_data:
         driver: local
 
-networks:
-    bitrixdock:
